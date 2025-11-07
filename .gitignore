@@ -1,0 +1,46 @@
+# Environment variables (contains API keys)
+.env
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local data files
+profile_stats.json
+profile_status.json
+*.log
+/tmp/
+
+# Already followed files
+*_already_followed.txt
+already_followed_*.txt
+
+# Test files
+test_*.py
+analyze_*.py
+find_*.py
+understand_*.py
+check_*.py
+
+# Temporary files
+*.tmp
+*.bak
