@@ -13,7 +13,7 @@ from handlers import DashboardHandler
 from config import STATS_FILE, STATUS_FILE, MAX_CONCURRENT_PROFILES, PORT
 
 load_dotenv()
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s | %(filename)s:%(lineno)d')
 logger = logging.getLogger(__name__)
 
 
@@ -29,10 +29,29 @@ class AppState:
 
 @dataclass
 class Executors:
-    profile: ThreadPoolExecutor = field(default_factory=lambda: ThreadPoolExecutor(max_workers=20))
-    airtable: ThreadPoolExecutor = field(default_factory=lambda: ThreadPoolExecutor(max_workers=5))
-    io: ThreadPoolExecutor = field(default_factory=lambda: ThreadPoolExecutor(max_workers=10))
-    dashboard: ThreadPoolExecutor = field(default_factory=lambda: ThreadPoolExecutor(max_workers=5))
+    profile: ThreadPoolExecutor = field(
+        default_factory=lambda: ThreadPoolExecutor(max_workers=20, thread_name_prefix="profile"))
+    airtable: ThreadPoolExecutor = field(
+        default_factory=lambda: ThreadPoolExecutor(max_workers=5, thread_name_prefix="airtable"))
+    io: ThreadPoolExecutor = field(default_factory=lambda: ThreadPoolExecutor(max_workers=10, thread_name_prefix="io"))
+    dashboard: ThreadPoolExecutor = field(
+        default_factory=lambda: ThreadPoolExecutor(max_workers=5, thread_name_prefix="dashboard"))
+
+    @property
+    def profile_executor(self):
+        return self.profile
+
+    @property
+    def airtable_executor(self):
+        return self.airtable
+
+    @property
+    def io_executor(self):
+        return self.io
+
+    @property
+    def dashboard_executor(self):
+        return self.dashboard
 
 
 class ManagerFactory:
@@ -221,7 +240,6 @@ class XBotApplication:
     def create_server(self, port: int):
         httpd = ThreadingHTTPServer(('', port), DashboardHandler)
 
-        # Передаем все через один объект
         httpd.app = self
 
         httpd.profiles = self.state.profiles
@@ -246,7 +264,6 @@ class XBotApplication:
         return httpd
 
     def run(self):
-
         if not self.initialize_profiles():
             return
 
@@ -255,9 +272,8 @@ class XBotApplication:
 
         self.managers['dashboard_cache'].update_cache()
 
-        # Update Remaining Targets for all Target records at startup
         logger.info("Updating Remaining Targets for all Target records...")
-        self.executors.airtable_executor.submit(
+        self.executors.airtable.submit(
             self.managers['airtable'].update_all_remaining_targets
         )
 
@@ -274,10 +290,9 @@ class XBotApplication:
         except OSError as e:
             self._handle_server_error(e)
         except Exception as e:
-            logger.error(f"Server error: {e}")
+            logger.error(f"Server error: {e}", exc_info=True)
 
     def _log_startup_info(self):
-        """Выводит информацию о запуске"""
         logger.info(f"Dashboard at http://localhost:{PORT}")
         logger.info("✨ ULTIMATE FIX APPLIED:")
         logger.info("  - Separate dashboard cache from profile operations")
@@ -289,7 +304,6 @@ class XBotApplication:
         logger.info("🚀 Dashboard will NEVER freeze again!")
 
     def _handle_server_error(self, error: OSError):
-        """Обрабатывает ошибки сервера"""
         if error.errno == 48:  # Address already in use
             logger.error(f"Port {PORT} is already in use.")
             logger.info("To kill the existing server, run: lsof -ti:8080 | xargs kill -9")
