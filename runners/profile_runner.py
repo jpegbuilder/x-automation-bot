@@ -75,7 +75,10 @@ class ProfileRunner:
 
         # Use AdsPower serial number if available, otherwise fall back to pid
         bot_profile_id = adspower_serial if adspower_serial else pid
-        bot = XFollowBot(profile_id=bot_profile_id)
+        bot = XFollowBot(
+            profile_id=bot_profile_id,
+            airtable_manager=self.airtable_manager
+        )
 
         with self.profiles_lock:
             self.profiles[key]['bot'] = bot

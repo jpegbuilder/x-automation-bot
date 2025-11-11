@@ -90,6 +90,7 @@ class AirtableManager:
                     retry_delay *= 2
                 else:
                     return False
+        return False
 
     def update_profile_statistics(self, profile_number, last_run=None, follows_today=None, total_follows=None):
         """Update profile statistics in Airtable"""
