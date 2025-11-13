@@ -64,7 +64,7 @@ class ManagerFactory:
     def create_all(self):
 
         self.managers['config'] = ConfigManager()
-        self.managers['async_file'] = AsyncFileManager(STATS_FILE, STATUS_FILE)
+        self.managers['async_file'] = AsyncFileManager(stats_file=STATS_FILE, status_file=STATUS_FILE)
         self.managers['already_followed'] = AlreadyFollowedManager()
         self.managers['profile_specific_username'] = ProfileSpecificUsernameManager()
 

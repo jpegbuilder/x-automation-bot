@@ -62,11 +62,11 @@ class XSelectors:
 
     # Profile existence indicators
     PROFILE_ERROR_SELECTORS: List[str] = field(default_factory=lambda: [
-        "//span[contains(text(), \"doesn't exist\")]",
-        "//span[contains(text(), 'Doesn't exist')]",
-        "//*[contains(text(), \"This account doesn't exist\")]",
-        "//*[contains(text(), 'Account suspended')]",
-        "//div[@data-testid='error-detail']"
+        '//span[contains(text(), "doesn")]',
+        '//span[contains(text(), "Doesn")]',
+        '//*[contains(text(), "This account")]',
+        '//*[contains(text(), "Account suspended")]',
+        '//div[@data-testid="error-detail"]'
     ])
 
     PROFILE_INDICATORS: List[str] = field(default_factory=lambda: [

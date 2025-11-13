@@ -57,6 +57,7 @@ class BrowserManager:
             return False
 
     def start_profile(self) -> bool:
+        """Запускает профиль AdsPower"""
         if not self.check_adspower_connection():
             return False
 
@@ -84,15 +85,71 @@ class BrowserManager:
                 return True
             else:
                 error_msg = data.get('msg', 'Unknown error')
+                # Проверяем не запущен ли уже профиль
                 if any(kw in error_msg.lower() for kw in ['already', 'running', 'opened', 'started', 'being used']):
-                    logger.warning(f"Profile {self.profile_id}: Already running, attempting to connect...")
-                    return self._get_running_profile_info()
+                    logger.warning(f"Profile {self.profile_id}: Already running, attempting restart...")
+                    # ИЗМЕНЕНИЕ: Сразу пробуем рестарт вместо get_running_profile_info
+                    return self._restart_profile()
                 else:
                     logger.error(f"Profile {self.profile_id}: Failed to start - {error_msg}")
                     return False
 
         except Exception as e:
             logger.error(f"Profile {self.profile_id}: Error starting profile: {e}")
+            return False
+
+    def _restart_profile(self) -> bool:
+        """Перезапускает профиль"""
+        try:
+            logger.info(f"Profile {self.profile_id}: Restarting profile...")
+
+            # Останавливаем (игнорируем ошибки)
+            try:
+                url = f"{self.adspower_api_url}/api/v1/browser/stop"
+                param_name = self._get_profile_param_name()
+                params = {param_name: self.profile_id}
+
+                response = requests.get(url, params=params, headers=self._get_headers())
+                data = response.json()
+
+                if data.get('code') == 0:
+                    logger.info(f"Profile {self.profile_id}: Stopped successfully")
+                else:
+                    logger.warning(f"Profile {self.profile_id}: Stop returned: {data.get('msg', 'Unknown')}")
+            except Exception as e:
+                logger.warning(f"Profile {self.profile_id}: Stop error (ignoring): {e}")
+
+            # Ждем
+            time.sleep(3)
+
+            # Запускаем заново
+            url = f"{self.adspower_api_url}/api/v1/browser/start"
+            param_name = self._get_profile_param_name()
+
+            params = {
+                param_name: self.profile_id,
+                "launch_args": "",
+                "headless": 0,
+                "disable_password_filling": 0,
+                "clear_cache_after_closing": 0,
+                "enable_password_saving": 0
+            }
+
+            response = requests.get(url, params=params, headers=self._get_headers())
+            data = response.json()
+
+            if data.get('code') == 0:
+                self.adspower_response = data
+                debug_info = data['data']['ws']['selenium']
+                self.debug_port = str(debug_info).split(':')[-1] if ':' in str(debug_info) else str(debug_info)
+                logger.info(f"Profile {self.profile_id}: Successfully restarted! Port: {self.debug_port}")
+                return True
+            else:
+                logger.error(f"Profile {self.profile_id}: Restart failed - {data.get('msg', 'Unknown')}")
+                return False
+
+        except Exception as e:
+            logger.error(f"Profile {self.profile_id}: Error during restart: {e}")
             return False
 
     def _get_running_profile_info(self) -> bool:
@@ -269,27 +326,36 @@ class BrowserManager:
         return False
 
     def stop_profile(self) -> bool:
+        """Останавливает профиль AdsPower"""
         try:
+            # Закрываем драйвер
             if self.driver:
                 try:
+                    logger.info(f"Profile {self.profile_id}: Quitting driver...")
                     self.driver.quit()
+                    logger.info(f"Profile {self.profile_id}: Driver quit successfully")
                 except Exception as e:
-                    logger.debug(f"Profile {self.profile_id}: Error quitting driver: {e}")
+                    logger.warning(f"Profile {self.profile_id}: Error quitting driver: {e}")
 
+            # Останавливаем через API
             url = f"{self.adspower_api_url}/api/v1/browser/stop"
             param_name = self._get_profile_param_name()
             params = {param_name: self.profile_id}
 
-            response = requests.get(url, params=params, headers=self._get_headers())
+            logger.info(f"Profile {self.profile_id}: Sending stop request to AdsPower API...")
+            response = requests.get(url, params=params, headers=self._get_headers(), timeout=10)
             data = response.json()
+
+            logger.info(f"Profile {self.profile_id}: Stop API response: {data}")
 
             if data.get('code') == 0:
                 logger.info(f"Profile {self.profile_id}: Stopped successfully")
                 return True
             else:
                 error_msg = data.get('msg', 'Unknown error')
+                # Игнорируем если уже остановлен
                 if any(kw in error_msg.lower() for kw in
-                       ['not running', 'not started', 'already stopped', 'not found']):
+                       ['not running', 'not started', 'already stopped', 'not found', 'not open']):
                     logger.info(f"Profile {self.profile_id}: Was already stopped")
                     return True
                 else:

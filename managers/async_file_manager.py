@@ -16,8 +16,8 @@ class AsyncFileManager:
     def __init__(self, *args, **kwargs):
         self.stats_write_lock = threading.Lock()
         self.status_write_lock = threading.Lock()
-        self.stats_file = kwargs.get('stats_file') or None
-        self.status_file = kwargs.get('status_file') or None
+        self.stats_file = kwargs.get('stats_file')
+        self.status_file = kwargs.get('status_file')
 
 
     def write_stats_async(self, stats_update):
