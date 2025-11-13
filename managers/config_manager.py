@@ -2,11 +2,9 @@ import json
 import os
 import threading
 import logging
+from config import CONFIG_FILE
 
 logger = logging.getLogger(__name__)
-
-CONFIG_FILE = 'config.json'
-
 
 
 class ConfigManager:

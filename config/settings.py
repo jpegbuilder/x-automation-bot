@@ -18,6 +18,7 @@ ADSPOWER_API_KEY = os.getenv('ADSPOWER_API_KEY', '')
 # Local constants
 STATS_FILE = os.getenv('STATS_FILE', '')
 STATUS_FILE = os.getenv('STATUS_FILE', '')
+CONFIG_FILE = os.getenv('CONFIG_FILE', '')
 
 # Profile Configuration
 MAX_CONCURRENT_PROFILES = int(os.getenv('MAX_CONCURRENT_PROFILES', 50))
