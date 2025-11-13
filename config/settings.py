@@ -22,3 +22,8 @@ CONFIG_FILE = os.getenv('CONFIG_FILE', '')
 
 # Profile Configuration
 MAX_CONCURRENT_PROFILES = int(os.getenv('MAX_CONCURRENT_PROFILES', 50))
+
+
+if __name__ != "__main__":
+    from config.validate_settings import validate_settings
+    validate_settings()
