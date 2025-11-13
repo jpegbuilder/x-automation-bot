@@ -81,7 +81,7 @@ class FollowManager:
             if reason in ["unknown", "error"]:
                 logger.info(f"Profile {self.profile_id}: User @{username} status uncertain, attempting to follow...")
 
-            follow_button = self._find_follow_button()
+            follow_button = self._find_follow_button(username)
 
             if not follow_button:
                 logger.warning(f"Profile {self.profile_id}: Follow button not found for @{username}")
@@ -91,9 +91,9 @@ class FollowManager:
             if "following" in button_text or "pending" in button_text:
                 logger.info(f"Profile {self.profile_id}: Already following or pending @{username}")
                 return True, 'followed'
-
-            follow_button.click()
-            logger.info(f"Profile {self.profile_id}: Clicked follow button for @{username}")
+            else:
+                follow_button.click()
+                logger.info(f"Profile {self.profile_id}: Clicked follow button for @{username}")
 
             time.sleep(0.2)
 
@@ -119,10 +119,11 @@ class FollowManager:
             logger.error(f"Profile {self.profile_id}: Error following @{username}: {e}")
             return False, 'failed'
 
-    def _find_follow_button(self):
+    def _find_follow_button(self, username: str):
 
         try:
             for selector in self.selectors.FOLLOW_BUTTONS:
+                logger.info(f"Selector for find @{username} / @{selector}")
                 try:
                     button = WebDriverWait(self.driver, 1).until(
                         EC.element_to_be_clickable((By.XPATH, selector))

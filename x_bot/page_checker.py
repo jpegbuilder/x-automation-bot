@@ -40,7 +40,7 @@ class PageChecker:
             except NoSuchElementException:
                 continue
 
-        return False
+        # return False
 
     def check_url_contains(self, paths: List[str], check_name: str) -> bool:
 

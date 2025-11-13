@@ -468,9 +468,9 @@ class AirtableManager:
             # Query AdsPower names for all profiles
             if adspower_ids_to_query:
                 logger.info(f"Querying {len(adspower_ids_to_query)} AdsPower profile names...")
-                logger.info(f"AdsPower IDs to query: {adspower_ids_to_query}")
+                logger.info(f"AdsPower IDs to query count: {len(adspower_ids_to_query)}")
                 adspower_names = self.batch_query_adspower_profiles(adspower_ids_to_query)
-                logger.info(f"Got {len(adspower_names)} AdsPower profile names: {adspower_names}")
+                logger.info(f"Got {len(adspower_names)} AdsPower profile names count: {len(adspower_names)}")
             else:
                 adspower_names = {}
 

@@ -44,6 +44,8 @@ class XSelectors:
     FOLLOW_BLOCK_SELECTORS: List[str] = field(default_factory=lambda: [
         "//span[contains(text(), 'You are unable to follow more people')]",
         "//span[contains(text(), 'You have reached your daily limit')]",
+        "//span[contains(text(), 'Sorry, you are rate limited. Please wait a few moments then try again.')]",
+        "//*[contains(text(), 'Sorry, you are rate limited. Please wait a few moments then try again.')]",
         "//div[contains(text(), 'Try Again Later')]",
         "//div[contains(text(), 'Action Blocked')]",
         "//h2[contains(text(), 'Try Again Later')]",
@@ -99,3 +101,6 @@ class XSelectors:
         "page doesn't exist",
         "this page doesn't exist"
     ])
+
+# Pending
+# A follow request has been sent to @JhoelGalla64110 and is pending their approval.
