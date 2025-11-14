@@ -371,34 +371,21 @@ class AirtableManager:
             traceback.print_exc()
             return False
 
-    def update_follow_limit_reached(self, record_id):
-        """Update 'Reached Follow Limit' field with current EET timestamp"""
+    def update_follow_limit_reached(self, record_id) -> bool:
         if not AIRTABLE_AVAILABLE:
             return False
-
         try:
             from datetime import datetime, timezone, timedelta
 
-            # Get current time in EET (UTC+2)
             eet = timezone(timedelta(hours=2))
             now_eet = datetime.now(eet)
+            formatted_time = now_eet.isoformat()
 
-            # Format as "November 8, 2025 00:20 eet"
-            # Use %d and strip leading zero manually for cross-platform compatibility
-            day = now_eet.day
-            month = now_eet.strftime("%B")
-            year = now_eet.year
-            time_str = now_eet.strftime("%H:%M")
-            formatted_time = f"{month} {day}, {year} {time_str} eet"
-
-            # Update Airtable
             self._rate_limit()
             table = self._api.table(AIRTABLE_BASE_ID, AIRTABLE_TABLE_NAME)
             table.update(record_id, {'Reached Follow Limit': formatted_time})
-
             logger.info(f"✅ Updated 'Reached Follow Limit' for record {record_id}: {formatted_time}")
             return True
-
         except Exception as e:
             logger.error(f"❌ Error updating 'Reached Follow Limit': {e}")
             import traceback
