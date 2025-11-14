@@ -90,6 +90,7 @@ class AirtableManager:
                     retry_delay *= 2
                 else:
                     return False
+        return False
 
     def update_profile_statistics(self, profile_number, last_run=None, follows_today=None, total_follows=None):
         """Update profile statistics in Airtable"""
@@ -370,34 +371,21 @@ class AirtableManager:
             traceback.print_exc()
             return False
 
-    def update_follow_limit_reached(self, record_id):
-        """Update 'Reached Follow Limit' field with current EET timestamp"""
+    def update_follow_limit_reached(self, record_id) -> bool:
         if not AIRTABLE_AVAILABLE:
             return False
-
         try:
             from datetime import datetime, timezone, timedelta
 
-            # Get current time in EET (UTC+2)
             eet = timezone(timedelta(hours=2))
             now_eet = datetime.now(eet)
+            formatted_time = now_eet.isoformat()
 
-            # Format as "November 8, 2025 00:20 eet"
-            # Use %d and strip leading zero manually for cross-platform compatibility
-            day = now_eet.day
-            month = now_eet.strftime("%B")
-            year = now_eet.year
-            time_str = now_eet.strftime("%H:%M")
-            formatted_time = f"{month} {day}, {year} {time_str} eet"
-
-            # Update Airtable
             self._rate_limit()
             table = self._api.table(AIRTABLE_BASE_ID, AIRTABLE_TABLE_NAME)
             table.update(record_id, {'Reached Follow Limit': formatted_time})
-
             logger.info(f"✅ Updated 'Reached Follow Limit' for record {record_id}: {formatted_time}")
             return True
-
         except Exception as e:
             logger.error(f"❌ Error updating 'Reached Follow Limit': {e}")
             import traceback
@@ -467,9 +455,9 @@ class AirtableManager:
             # Query AdsPower names for all profiles
             if adspower_ids_to_query:
                 logger.info(f"Querying {len(adspower_ids_to_query)} AdsPower profile names...")
-                logger.info(f"AdsPower IDs to query: {adspower_ids_to_query}")
+                logger.info(f"AdsPower IDs to query count: {len(adspower_ids_to_query)}")
                 adspower_names = self.batch_query_adspower_profiles(adspower_ids_to_query)
-                logger.info(f"Got {len(adspower_names)} AdsPower profile names: {adspower_names}")
+                logger.info(f"Got {len(adspower_names)} AdsPower profile names count: {len(adspower_names)}")
             else:
                 adspower_names = {}
 

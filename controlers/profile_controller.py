@@ -18,6 +18,7 @@ class ProfileController:
 
     def start_profile(self, pid):
         """Start a profile with concurrent limit management"""
+        logger.info(f"ProfileController: Starting profile {pid}...")
         if self.concurrency_manager.can_start_new_profile():
             return self.profile_runner.start_profile_internal(pid)
         else:

@@ -1,11 +1,9 @@
 import threading
 import logging
 import time
+from config import MAX_CONCURRENT_PROFILES
 
 logger = logging.getLogger(__name__)
-
-MAX_CONCURRENT_PROFILES = 50
-
 
 
 class ConcurrencyManager:

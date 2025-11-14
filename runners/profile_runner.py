@@ -75,7 +75,11 @@ class ProfileRunner:
 
         # Use AdsPower serial number if available, otherwise fall back to pid
         bot_profile_id = adspower_serial if adspower_serial else pid
-        bot = XFollowBot(profile_id=bot_profile_id)
+        bot = XFollowBot(
+            profile_id=bot_profile_id,
+            airtable_manager=self.airtable_manager
+        )
+        logger.info(f'Starting profile {pid}. Bot ID: {bot.profile_id} create successfully')
 
         with self.profiles_lock:
             self.profiles[key]['bot'] = bot
@@ -271,6 +275,8 @@ class ProfileRunner:
         """Wrapper that handles cleanup"""
         try:
             self.profile_runner(pid, max_follows)
+        except Exception as e:
+            logger.error(f"Profile {pid} profile run error: {e}")
         finally:
             key = str(pid)
             with self.profiles_lock:

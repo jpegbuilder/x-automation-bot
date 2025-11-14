@@ -74,8 +74,11 @@ class DashboardCacheManager:
                 self.dashboard_cache['last_update'] = current_time
 
             # файлы — синхронно, если нет executor’а
-            if self.io_executor:
-                self.io_executor.submit(self._update_file_caches)
+            if self.io_executor and not self.io_executor._shutdown:
+                try:
+                    self.io_executor.submit(self._update_file_caches)
+                except RuntimeError:
+                    self._update_file_caches()
             else:
                 self._update_file_caches()
 

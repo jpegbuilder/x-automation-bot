@@ -1778,7 +1778,7 @@
                 pendingProfiles: data.concurrent_info.pending_profiles,
                 remainingUsernames: data.remaining_usernames
             };
-
+            console.log('!!! const elements',elements);
             // Update all at once
             Object.keys(elements).forEach(id => {
                 const element = document.getElementById(id);
