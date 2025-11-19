@@ -1,8 +1,8 @@
 {
   "delays": {
     "between_follows": [
-      5,
-      10
+      60,
+      210
     ],
     "pre_action_delay": [
       2,
