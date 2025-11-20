@@ -211,9 +211,30 @@ class ProfileRunner:
                     self.status_manager.mark_profile_suspended(pid)
                     break
 
-                # Delays
+                # Delays with scrolling behavior
                 delay = random.uniform(between_follows[0], between_follows[1])
-                time.sleep(delay)
+                logger.info(f"Profile {pid}: Waiting {delay:.1f}s with page scrolling...")
+
+                # Scroll the page randomly during the wait time
+                elapsed_time = 0
+                scroll_interval = random.uniform(3, 8)  # Scroll for 3-8 seconds at a time
+
+                while elapsed_time < delay:
+                    remaining_time = delay - elapsed_time
+
+                    # Determine how long to scroll this iteration
+                    scroll_duration = min(scroll_interval, remaining_time)
+
+                    # Perform scrolling
+                    bot.browser_manager.scroll_page_randomly(scroll_duration)
+
+                    elapsed_time += scroll_duration
+
+                    # If there's still time remaining, add a brief pause before next scroll session
+                    if elapsed_time < delay:
+                        pause_time = min(random.uniform(1, 3), delay - elapsed_time)
+                        time.sleep(pause_time)
+                        elapsed_time += pause_time
 
                 # Extended breaks
                 if i > 0 and i % random.randint(extended_break_interval[0], extended_break_interval[1]) == 0:

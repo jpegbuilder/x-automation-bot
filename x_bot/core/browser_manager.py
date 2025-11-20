@@ -1,5 +1,6 @@
 import os
 import time
+import random
 import logging
 import requests
 from selenium import webdriver
@@ -318,6 +319,48 @@ class BrowserManager:
         except Exception:
             pass
         return False
+
+    def scroll_page_randomly(self, duration: float = 5.0) -> bool:
+        """
+        Scrolls the page up and down randomly during a given duration.
+
+        Args:
+            duration: How long to perform scrolling actions (in seconds)
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            if not self.driver or not self.check_window_available():
+                logger.warning(f"Profile {self.profile_id}: Cannot scroll - driver not available")
+                return False
+
+            end_time = time.time() + duration
+            scroll_count = 0
+
+            while time.time() < end_time:
+                # Random scroll amount (can be positive or negative for up/down)
+                scroll_amount = random.randint(-800, 800)
+
+                try:
+                    # Execute scroll
+                    self.driver.execute_script(f"window.scrollBy(0, {scroll_amount});")
+                    scroll_count += 1
+
+                    # Wait a random short time before next scroll
+                    wait_time = random.uniform(0.5, 2.0)
+                    time.sleep(min(wait_time, end_time - time.time()))
+
+                except Exception as e:
+                    logger.debug(f"Profile {self.profile_id}: Scroll action error: {e}")
+                    break
+
+            logger.debug(f"Profile {self.profile_id}: Performed {scroll_count} scroll actions over {duration:.1f}s")
+            return True
+
+        except Exception as e:
+            logger.error(f"Profile {self.profile_id}: Error during page scrolling: {e}")
+            return False
 
     def stop_profile(self) -> bool:
         try:

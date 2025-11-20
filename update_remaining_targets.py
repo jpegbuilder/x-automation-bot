@@ -19,7 +19,7 @@ from config import (
 )
 
 # Field names
-TARGETS_FIELD = 'Targets'
+TARGETS_FIELD = 'Follow Targets'
 ALREADY_FOLLOWED_FIELD = 'Already Followed'
 REMAINING_TARGETS_FIELD = 'Remaining Targets'
 

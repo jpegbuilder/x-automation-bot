@@ -1,6 +1,8 @@
 import threading
 import queue
 import logging
+import signal
+import sys
 from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor
 from http.server import ThreadingHTTPServer
@@ -263,9 +265,54 @@ class XBotApplication:
 
         return httpd
 
+    def _save_all_stats_to_airtable(self):
+        """Save stats and Already Followed files for all active/running profiles to Airtable before shutdown"""
+        logger.info("💾 Saving all profile data to Airtable before shutdown...")
+
+        with self.state.profiles_lock:
+            for profile_id, profile_data in self.state.profiles.items():
+                status = profile_data.get('status', 'Unknown')
+
+                # Only save for profiles that were running or just stopped
+                if status in ['Running', 'Stopped', 'Finished', 'Blocked', 'Suspended']:
+                    try:
+                        # Save stats to Airtable
+                        stats = self.managers['stats'].get_profile_stats(profile_id)
+                        if stats['last_run'] > 0:  # Only if there were follows this session
+                            logger.info(f"Saving stats for profile {profile_id} ({stats['last_run']} follows)...")
+                            self.managers['airtable'].update_profile_statistics_on_completion(profile_id)
+
+                        # Upload Already Followed file to Airtable
+                        already_followed_file = profile_data.get('already_followed_file')
+                        airtable_record_id = profile_data.get('airtable_record_id')
+
+                        if already_followed_file and airtable_record_id:
+                            logger.info(f"Uploading Already Followed file for profile {profile_id}...")
+                            self.managers['airtable'].upload_already_followed_file(
+                                airtable_record_id,
+                                already_followed_file
+                            )
+                    except Exception as e:
+                        logger.warning(f"Could not save data for profile {profile_id}: {e}")
+
+        logger.info("✅ All profile data saved to Airtable")
+
+    def _setup_signal_handlers(self):
+        """Setup signal handlers for graceful shutdown"""
+        def signal_handler(signum, frame):
+            logger.info(f"Received signal {signum} - initiating graceful shutdown...")
+            self._save_all_stats_to_airtable()
+            sys.exit(0)
+
+        signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C
+        signal.signal(signal.SIGTERM, signal_handler)  # Kill command
+
     def run(self):
         if not self.initialize_profiles():
             return
+
+        # Setup signal handlers for graceful shutdown
+        self._setup_signal_handlers()
 
         username_count = self.managers['username'].load_usernames_to_queue()
         logger.info(f"Loaded {username_count} usernames")
@@ -286,11 +333,19 @@ class XBotApplication:
             logger.info(f"Server started successfully on port {PORT}")
             httpd.serve_forever()
         except KeyboardInterrupt:
-            logger.info("Shutdown requested")
+            logger.info("Shutdown requested - saving stats...")
+            self._save_all_stats_to_airtable()
         except OSError as e:
             self._handle_server_error(e)
         except Exception as e:
             logger.error(f"Server error: {e}", exc_info=True)
+            # Save stats even on error
+            try:
+                self._save_all_stats_to_airtable()
+            except:
+                pass
+        finally:
+            logger.info("Dashboard shutdown complete")
 
     def _log_startup_info(self):
         logger.info(f"Dashboard at http://localhost:{PORT}")
