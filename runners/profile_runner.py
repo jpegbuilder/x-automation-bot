@@ -28,7 +28,8 @@ class ProfileRunner:
 
     def profile_runner(self, pid, max_follows):
         """Main profile runner logic"""
-        from x_bot import XFollowBot
+        from x_bot.core import XFollowBot
+        from x_bot.scenario.scenario_engine import ScenarioEngine
 
         key = str(pid)
 
@@ -75,11 +76,15 @@ class ProfileRunner:
 
         # Use AdsPower serial number if available, otherwise fall back to pid
         bot_profile_id = adspower_serial if adspower_serial else pid
-        bot = XFollowBot(
+        inner_bot = XFollowBot(
             profile_id=bot_profile_id,
             airtable_manager=self.airtable_manager
         )
-        logger.info(f'Starting profile {pid}. Bot ID: {bot.profile_id} create successfully')
+        logger.info(f'Starting profile {pid}. Bot ID: {inner_bot.profile_id} create successfully')
+
+        # Wrap XFollowBot with ScenarioEngine
+        # scenarios_path можно взять из конфига, пока — дефолт в корне проекта
+        bot = ScenarioEngine(bot=inner_bot)
 
         with self.profiles_lock:
             self.profiles[key]['bot'] = bot

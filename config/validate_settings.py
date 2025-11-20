@@ -20,7 +20,7 @@ def validate_settings():
         print(f"\n❌ The server cannot start. Please set all required environment variables.\n")
         sys.exit(1)
 
-    print("✅ All settings are fine!\n")
+    print("\n✅ All settings are fine!\n")
     return True
 
 

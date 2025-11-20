@@ -6,6 +6,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from config import CONFIG_FILE
 
 logger = logging.getLogger(__name__)
 
@@ -20,13 +21,11 @@ class FollowManager:
         self.account_checker = account_checker
         self.follow_checker = follow_checker
         self.selectors = selectors
+        self.delay_config = CONFIG_FILE or {}
 
-    def navigate_to_profile(self, username: str, delay_config: dict = None) -> bool:
+    def navigate_to_profile(self, username: str) -> bool:
 
         try:
-            if delay_config is None:
-                delay_config = {}
-
             if not self.browser_manager.check_window_available():
                 logger.error(f"Profile {self.profile_id}: Browser window unavailable")
                 return False
@@ -34,7 +33,7 @@ class FollowManager:
             profile_url = f"https://x.com/{username}"
             self.driver.get(profile_url)
 
-            page_load_wait = delay_config.get('page_load_wait', [0.5, 2])
+            page_load_wait = self.delay_config.get('page_load_wait', [0.5, 2])
             wait_time = random.uniform(page_load_wait[0], page_load_wait[1])
             time.sleep(wait_time)
 
@@ -45,11 +44,10 @@ class FollowManager:
             logger.error(f"Profile {self.profile_id}: Error navigating to @{username}: {e}")
             return False
 
-    def follow_user(self, username: str, delay_config: dict = None) -> Tuple[bool, str]:
+    def follow_user(self, username: str) -> Tuple[bool, str]:
         """
         Args:
             username: username
-            delay_config: config
 
         Returns:
             (success: bool, reason: str)
@@ -59,10 +57,7 @@ class FollowManager:
             - (False, 'failed')
         """
         try:
-            if delay_config is None:
-                delay_config = {}
-
-            if not self.navigate_to_profile(username, delay_config):
+            if not self.navigate_to_profile(username):
                 return False, 'failed'
 
             exists, reason = self.account_checker.check_if_profile_exists(username)
@@ -105,7 +100,7 @@ class FollowManager:
                 logger.error(f"Profile {self.profile_id}: ACCOUNT SUSPENDED!")
                 return False, 'failed'
 
-            follow_check_timeout = delay_config.get('follow_check_timeout', 8)
+            follow_check_timeout = self.delay_config.get('follow_check_timeout', 8)
             success = self.follow_checker.check_follow_success(username, follow_check_timeout)
 
             if success:

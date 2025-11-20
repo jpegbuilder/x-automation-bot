@@ -5,6 +5,7 @@ import requests
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
+from config import ADSPOWER_API_URL, ADSPOWER_API_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +24,10 @@ CHROMEDRIVER_PATH = os.path.join(SCRIPT_DIR, "..", "chromedrivers", "chromedrive
 
 class BrowserManager:
 
-    def __init__(self, profile_id: str, adspower_api_url: str, adspower_api_key: str):
+    def __init__(self, profile_id: str):
         self.profile_id = profile_id
-        self.adspower_api_url = adspower_api_url
-        self.adspower_api_key = adspower_api_key
+        self.adspower_api_url = ADSPOWER_API_URL
+        self.adspower_api_key = ADSPOWER_API_KEY
         self.driver = None
         self.debug_port = None
         self.adspower_response = None
@@ -57,7 +58,6 @@ class BrowserManager:
             return False
 
     def start_profile(self) -> bool:
-        """Запускает профиль AdsPower"""
         if not self.check_adspower_connection():
             return False
 
@@ -71,10 +71,10 @@ class BrowserManager:
                 "headless": 0,
                 "disable_password_filling": 0,
                 "clear_cache_after_closing": 0,
-                "enable_password_saving": 0
+                "enable_password_saving": 0,
             }
 
-            response = requests.get(url, params=params, headers=self._get_headers())
+            response = requests.get(url, params=params, headers=self._get_headers(), timeout=5)
             data = response.json()
 
             if data.get('code') == 0:
@@ -85,10 +85,8 @@ class BrowserManager:
                 return True
             else:
                 error_msg = data.get('msg', 'Unknown error')
-                # Проверяем не запущен ли уже профиль
                 if any(kw in error_msg.lower() for kw in ['already', 'running', 'opened', 'started', 'being used']):
                     logger.warning(f"Profile {self.profile_id}: Already running, attempting restart...")
-                    # ИЗМЕНЕНИЕ: Сразу пробуем рестарт вместо get_running_profile_info
                     return self._restart_profile()
                 else:
                     logger.error(f"Profile {self.profile_id}: Failed to start - {error_msg}")
@@ -99,11 +97,9 @@ class BrowserManager:
             return False
 
     def _restart_profile(self) -> bool:
-        """Перезапускает профиль"""
         try:
             logger.info(f"Profile {self.profile_id}: Restarting profile...")
 
-            # Останавливаем (игнорируем ошибки)
             try:
                 url = f"{self.adspower_api_url}/api/v1/browser/stop"
                 param_name = self._get_profile_param_name()
@@ -119,10 +115,8 @@ class BrowserManager:
             except Exception as e:
                 logger.warning(f"Profile {self.profile_id}: Stop error (ignoring): {e}")
 
-            # Ждем
             time.sleep(3)
 
-            # Запускаем заново
             url = f"{self.adspower_api_url}/api/v1/browser/start"
             param_name = self._get_profile_param_name()
 
@@ -326,9 +320,7 @@ class BrowserManager:
         return False
 
     def stop_profile(self) -> bool:
-        """Останавливает профиль AdsPower"""
         try:
-            # Закрываем драйвер
             if self.driver:
                 try:
                     logger.info(f"Profile {self.profile_id}: Quitting driver...")
@@ -337,7 +329,6 @@ class BrowserManager:
                 except Exception as e:
                     logger.warning(f"Profile {self.profile_id}: Error quitting driver: {e}")
 
-            # Останавливаем через API
             url = f"{self.adspower_api_url}/api/v1/browser/stop"
             param_name = self._get_profile_param_name()
             params = {param_name: self.profile_id}
@@ -353,7 +344,6 @@ class BrowserManager:
                 return True
             else:
                 error_msg = data.get('msg', 'Unknown error')
-                # Игнорируем если уже остановлен
                 if any(kw in error_msg.lower() for kw in
                        ['not running', 'not started', 'already stopped', 'not found', 'not open']):
                     logger.info(f"Profile {self.profile_id}: Was already stopped")

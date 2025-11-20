@@ -1,0 +1,89 @@
+# Testing scenarios for X Follow Bot
+# Every step = method in XFollowBot class
+# Methods:
+# - go_home
+# - wait: 2
+# - navigate_to_profile
+# - follow_user
+# - check_has_posts
+# - like_random_post
+# - find_and_goto_repost_author
+# - scroll_posts: 2
+# - count_posts
+
+scenarios:
+  # Scenario 1: Simple follow
+  simple_follow:
+    description: "Go to Profile → Follow → Home"
+    target_required: true
+    steps:
+      - wait: 2
+      - navigate_to_profile
+      - wait: 3
+      - follow_user
+      - go_home
+      - wait: 2
+
+
+  # Scenario 2: Like + follow
+  like_and_follow:
+    description: "Profile → Scroll → Like → Follow"
+    target_required: true
+    steps:
+      - wait: 2
+      - navigate_to_profile
+      - check_has_posts
+      - scroll_posts: 2
+      - like_random_post
+      - follow_user
+      - go_home
+      - wait: 2
+
+  # Scenario 3: Cautious follow with pauses
+  careful_follow:
+    description: "Natural behavior with pauses"
+    target_required: true
+    steps:
+      - wait: 3
+      - navigate_to_profile
+      - wait: 5
+      - check_has_posts
+      - scroll_posts: 2
+      - wait: 3
+      - like_first_post
+      - wait: 2
+      - follow_user
+      - wait: 2
+      - go_home
+      - wait: 2
+
+  # Scenario 4: Full interaction
+  full_interaction:
+    description: "Home → Profile → Posts → Scroll → Like → Repost → Back → Follow → Home"
+    target_required: true
+    steps:
+      - wait: 2
+      - navigate_to_profile
+      - check_has_posts
+      - scroll_posts: 3
+      - like_random_post
+      - find_and_goto_repost_author
+      - wait: 3
+      - go_back
+      - follow_user
+      - go_home
+      - wait: 2
+
+  # Scenario 5: Research only
+  research_profile:
+    description: "Profile analysis without interaction"
+    target_required: true
+    steps:
+      - wait: 5
+      - navigate_to_profile
+      - wait: 6
+      - check_has_posts
+      - scroll_posts: 5
+      - count_posts
+      - go_home
+      - wait: 4
