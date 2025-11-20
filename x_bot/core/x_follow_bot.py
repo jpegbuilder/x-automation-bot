@@ -105,10 +105,10 @@ class XFollowBot:
         try:
             logger.info(f"Profile {self.profile_id}: Navigating to X.com...")
 
-            self.close_extra_tabs()
-
             self.driver.get("https://x.com")
             time.sleep(2)
+
+            self.close_extra_tabs()
 
             if self.check_if_suspended():
                 self.state.is_suspended = True
@@ -125,8 +125,9 @@ class XFollowBot:
             logger.error(f"Profile {self.profile_id}: Error navigating to X.com: {e}")
             return False
 
-    def navigate_to_profile(self, profile_id: str) -> bool:
-        return self.follow_manager.navigate_to_profile(profile_id)
+    def navigate_to_profile(self, username: str) -> bool:
+        self.close_extra_tabs()
+        return self.follow_manager.navigate_to_profile(username)
 
     def go_home(self) -> bool:
         """

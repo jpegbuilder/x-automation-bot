@@ -1,6 +1,7 @@
 import time
 import random
 import logging
+import json
 from typing import Tuple
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -23,6 +24,16 @@ class FollowManager:
         self.selectors = selectors
         self.delay_config = CONFIG_FILE or {}
 
+        try:
+            if CONFIG_FILE:
+                with open(CONFIG_FILE, 'r') as f:
+                    self.delay_config = json.load(f).get('delays', {})
+            else:
+                self.delay_config = {}
+        except Exception as e:
+            logger.warning(f"Failed to load config from {CONFIG_FILE}: {e}")
+            self.delay_config = {}
+
     def navigate_to_profile(self, username: str) -> bool:
 
         try:
@@ -32,7 +43,6 @@ class FollowManager:
 
             profile_url = f"https://x.com/{username}"
             self.driver.get(profile_url)
-
             page_load_wait = self.delay_config.get('page_load_wait', [0.5, 2])
             wait_time = random.uniform(page_load_wait[0], page_load_wait[1])
             time.sleep(wait_time)

@@ -278,9 +278,11 @@ class BrowserManager:
                     self.driver.switch_to.window(window)
                     current_url = self.driver.current_url
 
-                    if ("x.com" in current_url or "twitter.com" in current_url) and not x_window:
+                    if "x.com" in current_url or "twitter.com" in current_url:
+                        if x_window:
+                            windows_to_close.append(x_window)
                         x_window = window
-                        logger.info(f"Profile {self.profile_id}: Found X.com tab: {current_url}")
+                        logger.debug(f"Profile {self.profile_id}: Found X.com tab: {current_url}")
                     else:
                         windows_to_close.append(window)
                 except Exception:

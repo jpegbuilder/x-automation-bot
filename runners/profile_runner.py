@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 
 class ProfileRunner:
-    """Handles profile execution"""
+    """Handles profile execution - scenarios only"""
 
     def __init__(self, *args, **kwargs):
         self.io_executor = kwargs.get('io_executor') or None
@@ -34,7 +34,6 @@ class ProfileRunner:
         key = str(pid)
 
         # Check if this profile was blocked before starting
-        # Check both persistent status and Airtable status
         persistent_status = self.status_manager.get_persistent_status(pid)
         airtable_status = None
         with self.profiles_lock:
@@ -76,57 +75,89 @@ class ProfileRunner:
 
         # Use AdsPower serial number if available, otherwise fall back to pid
         bot_profile_id = adspower_serial if adspower_serial else pid
+
+        # ========================================
+        # STEP 1: Create bot and load scenarios
+        # ========================================
         inner_bot = XFollowBot(
             profile_id=bot_profile_id,
             airtable_manager=self.airtable_manager
         )
-        logger.info(f'Starting profile {pid}. Bot ID: {inner_bot.profile_id} create successfully')
+        logger.info(f'Profile {pid}: XFollowBot created successfully (ID: {inner_bot.profile_id})')
 
-        # Wrap XFollowBot with ScenarioEngine
-        # scenarios_path можно взять из конфига, пока — дефолт в корне проекта
-        bot = ScenarioEngine(bot=inner_bot)
+        # Load ScenarioEngine - REQUIRED, no fallback
+        try:
+            engine = ScenarioEngine(bot=inner_bot)  # Auto-search scenarios.yaml
+            scenario_names = list(engine.scenarios.keys())
+            logger.info(
+                f"Profile {pid}: ScenarioEngine loaded with {len(scenario_names)} scenarios: {scenario_names}"
+            )
+        except FileNotFoundError as e:
+            logger.error(f"Profile {pid}: scenarios.yaml not found - {e}")
+            logger.error(f"Profile {pid}: Cannot start without scenarios.yaml")
+            with self.profiles_lock:
+                self.profiles[key]['status'] = 'Error'
+            return
+        except Exception as e:
+            logger.error(f"Profile {pid}: Failed to load ScenarioEngine - {e}", exc_info=True)
+            with self.profiles_lock:
+                self.profiles[key]['status'] = 'Error'
+            return
 
+        # Store references
         with self.profiles_lock:
-            self.profiles[key]['bot'] = bot
+            self.profiles[key]['inner_bot'] = inner_bot
+            self.profiles[key]['scenario_engine'] = engine
 
         try:
-            # Initialize bot
-            if not bot.start_profile():
+            # ========================================
+            # STEP 2: Start browser
+            # ========================================
+            if not inner_bot.start_profile():
+                logger.error(f"Profile {pid}: Failed to start profile")
                 with self.profiles_lock:
                     self.profiles[key]['status'] = 'Error'
                 return
 
-            if not bot.connect_to_browser():
+            if not inner_bot.connect_to_browser():
+                logger.error(f"Profile {pid}: Failed to connect to browser")
                 with self.profiles_lock:
                     self.profiles[key]['status'] = 'Error'
-                bot.stop_profile()
+                inner_bot.stop_profile()
                 return
 
             # Close extra tabs immediately after connecting to reduce RAM usage
-            bot.close_extra_tabs()
+            inner_bot.close_extra_tabs()
 
-            if not bot.navigate_to_x():
-                if hasattr(bot, 'is_suspended') and bot.is_suspended:
-                    logger.error(f"Profile {pid}: SUSPENDED")
+            if not inner_bot.navigate_to_x():
+                if hasattr(inner_bot, 'is_suspended') and inner_bot.is_suspended:
+                    logger.error(f"Profile {pid}: Account SUSPENDED")
                     with self.profiles_lock:
                         self.profiles[key]['status'] = 'Suspended'
                     self.status_manager.mark_profile_suspended(pid)
                 else:
+                    logger.error(f"Profile {pid}: Failed to navigate to X")
                     with self.profiles_lock:
                         self.profiles[key]['status'] = 'Error'
-                bot.stop_profile()
+                inner_bot.stop_profile()
                 return
 
             # Check suspension
-            if bot.check_if_suspended():
-                logger.error(f"Profile {pid}: SUSPENDED")
+            if inner_bot.check_if_suspended():
+                logger.error(f"Profile {pid}: Account SUSPENDED")
                 with self.profiles_lock:
                     self.profiles[key]['status'] = 'Suspended'
                 self.status_manager.mark_profile_suspended(pid)
-                bot.stop_profile()
+                inner_bot.stop_profile()
                 return
 
-            # Follow loop
+            # Update status to Running
+            with self.profiles_lock:
+                self.profiles[key]['status'] = 'Running'
+
+            # ========================================
+            # STEP 3: Follow loop with scenarios
+            # ========================================
             follows_this_hour = 0
             hour_start_time = time.time()
 
@@ -137,6 +168,7 @@ class ProfileRunner:
                     stop_requested = self.profiles[key].get('stop_requested', False)
 
                 if stop_requested:
+                    logger.info(f"Profile {pid}: Stop requested")
                     with self.profiles_lock:
                         self.profiles[key]['status'] = 'Stopped'
                     break
@@ -149,6 +181,7 @@ class ProfileRunner:
 
                 if follows_this_hour >= max_follows_per_hour:
                     break_duration = random.uniform(hourly_reset_break[0], hourly_reset_break[1])
+                    logger.info(f"Profile {pid}: Hourly limit reached, taking {break_duration:.0f}s break")
                     time.sleep(break_duration)
                     follows_this_hour = 0
                     hour_start_time = time.time()
@@ -159,33 +192,69 @@ class ProfileRunner:
                     # Fallback to shared username pool
                     username = self.username_manager.get_next_username()
                     if not username:
+                        logger.info(f"Profile {pid}: No more usernames available")
                         with self.profiles_lock:
                             self.profiles[key]['status'] = 'Finished'
                         break
 
                 # Check if already followed
                 if self.already_follow_manager.is_already_followed(key, username):
-                    logger.info(f"Profile {pid}: Skipping {username} - already followed")
+                    logger.info(f"Profile {pid}: Skipping @{username} - already followed")
                     continue
 
                 # Pre-action pause
                 pause = random.uniform(pre_action_delay[0], pre_action_delay[1])
                 time.sleep(pause)
 
-                # Follow user
-                logger.info(f"Profile {pid}: Following {username} ({i + 1}/{max_follows})")
-                success = bot.follow_user(username, fast_mode=False, delay_config=delay_config)
+                # ========================================
+                # Execute scenario (round-robin automatic)
+                # ========================================
+                try:
+                    # Choose scenario - automatic round-robin
+                    scenario_name = engine.choose_scenario_for_user(
+                        profile_id=pid,
+                        username=username
+                    )
 
+                    logger.info(
+                        f"Profile {pid}: Executing scenario '{scenario_name}' for @{username} ({i + 1}/{max_follows})"
+                    )
+
+                    # Execute scenario
+                    result = engine.execute_scenario(
+                        name=scenario_name,
+                        target_username=username
+                    )
+
+                    success = result.get('success', False)
+
+                    if not success:
+                        error = result.get('error', 'Unknown error')
+                        logger.warning(
+                            f"Profile {pid}: Scenario '{scenario_name}' failed for @{username}: {error}"
+                        )
+
+                except Exception as e:
+                    logger.error(
+                        f"Profile {pid}: Exception during scenario execution for @{username}: {e}",
+                        exc_info=True
+                    )
+                    success = False
+
+                # Update stats if successful
                 if success:
                     self.stats_manager.increment_follow_count(pid)
                     follows_this_hour += 1
 
                     # Add to already followed list
                     self.already_follow_manager.add_followed_user(key, username)
-                    logger.info(f"Profile {pid}: Added {username} to already followed list")
+                    logger.info(
+                        f"Profile {pid}: Successfully completed scenario '{scenario_name}' for @{username}"
+                    )
 
-                # Check blocks
-                if bot.is_follow_blocked:
+                # Check for blocks - ALWAYS through inner_bot
+                if inner_bot.is_follow_blocked:
+                    logger.error(f"Profile {pid}: FOLLOW BLOCK detected")
                     with self.profiles_lock:
                         self.profiles[key]['status'] = 'Blocked'
                     self.status_manager.mark_profile_blocked(pid)
@@ -205,64 +274,53 @@ class ProfileRunner:
 
                     break
 
-                if bot.is_suspended:
+                if inner_bot.is_suspended:
+                    logger.error(f"Profile {pid}: SUSPENDED detected")
                     with self.profiles_lock:
                         self.profiles[key]['status'] = 'Suspended'
                     self.status_manager.mark_profile_suspended(pid)
                     break
 
-                # Delays with scrolling behavior
+                # Delays between follows
                 delay = random.uniform(between_follows[0], between_follows[1])
-                logger.info(f"Profile {pid}: Waiting {delay:.1f}s with page scrolling...")
-
-                # Scroll the page randomly during the wait time
-                elapsed_time = 0
-                scroll_interval = random.uniform(3, 8)  # Scroll for 3-8 seconds at a time
-
-                while elapsed_time < delay:
-                    remaining_time = delay - elapsed_time
-
-                    # Determine how long to scroll this iteration
-                    scroll_duration = min(scroll_interval, remaining_time)
-
-                    # Perform scrolling
-                    bot.browser_manager.scroll_page_randomly(scroll_duration)
-
-                    elapsed_time += scroll_duration
-
-                    # If there's still time remaining, add a brief pause before next scroll session
-                    if elapsed_time < delay:
-                        pause_time = min(random.uniform(1, 3), delay - elapsed_time)
-                        time.sleep(pause_time)
-                        elapsed_time += pause_time
+                logger.debug(f"Profile {pid}: Waiting {delay:.1f}s before next action")
+                time.sleep(delay)
 
                 # Extended breaks
                 if i > 0 and i % random.randint(extended_break_interval[0], extended_break_interval[1]) == 0:
                     long_break = random.uniform(extended_break_duration[0], extended_break_duration[1])
+                    logger.info(f"Profile {pid}: Taking extended break ({long_break:.0f}s)")
                     time.sleep(long_break)
 
                 # Very long breaks
                 if random.random() < very_long_break_chance:
                     very_long = random.uniform(very_long_break_duration[0], very_long_break_duration[1])
+                    logger.info(f"Profile {pid}: Taking very long break ({very_long:.0f}s)")
                     time.sleep(very_long)
 
         except Exception as e:
-            logger.error(f"Profile {pid} error: {e}")
+            logger.error(f"Profile {pid}: Unexpected error in main loop: {e}", exc_info=True)
             with self.profiles_lock:
                 self.profiles[key]['status'] = 'Error'
+
         finally:
-            # Cleanup
-            bot.stop_profile()
+            # ========================================
+            # STEP 4: Cleanup
+            # ========================================
+            inner_bot.stop_profile()
 
             # Check if this was a successful test of a previously blocked profile
             final_status = None
-            bot_was_blocked = bot.is_follow_blocked if bot else False
+            bot_was_blocked = inner_bot.is_follow_blocked if inner_bot else False
 
             with self.profiles_lock:
                 final_status = self.profiles[key]['status']
                 if self.profiles[key]['status'] == 'Running':
                     self.profiles[key]['status'] = 'Finished'
-                self.profiles[key]['bot'] = None
+
+                # Clear references
+                self.profiles[key]['inner_bot'] = None
+                self.profiles[key]['scenario_engine'] = None
 
             # Upload Already Followed file to Airtable
             already_followed_file = None
@@ -279,30 +337,30 @@ class ProfileRunner:
                     airtable_record_id,
                     already_followed_file
                 )
-                # Note: Remaining Targets are updated once at dashboard startup, not per profile
 
             # If this was a test mode and the profile was previously blocked but completed successfully
-            # Check both the final status AND the bot's internal follow block flag
             if is_test_mode and was_blocked:
                 if not bot_was_blocked and final_status in ['Running', 'Finished', 'Testing']:
-                    logger.info(f"Test successful for previously blocked profile {pid} - reviving profile")
+                    logger.info(f"Profile {pid}: Test successful for previously blocked profile - reviving")
                     self.status_manager.revive_profile_status(pid)
                 else:
-                    logger.info(f"Test confirmed profile {pid} is still blocked - keeping blocked status")
+                    logger.info(f"Profile {pid}: Test confirmed profile is still blocked - keeping blocked status")
 
             # Update Airtable
-            if self.profiles[key]['status'] in ['Finished', 'Stopped', 'Blocked', 'Suspended']:
+            if final_status in ['Finished', 'Stopped', 'Blocked', 'Suspended']:
                 self.airtable_executor.submit(
                     self.airtable_manager.update_profile_statistics_on_completion,
                     pid
                 )
+
+            logger.info(f"Profile {pid}: Completed with status '{final_status}'")
 
     def profile_runner_wrapper(self, pid, max_follows):
         """Wrapper that handles cleanup"""
         try:
             self.profile_runner(pid, max_follows)
         except Exception as e:
-            logger.error(f"Profile {pid} profile run error: {e}")
+            logger.error(f"Profile {pid}: Wrapper caught error: {e}", exc_info=True)
         finally:
             key = str(pid)
             with self.profiles_lock:
@@ -332,7 +390,6 @@ class ProfileRunner:
                     return False
 
         # Check Airtable status has priority
-        key = str(pid)
         with self.profiles_lock:
             if key in self.profiles:
                 airtable_status = self.profiles[key].get('airtable_status', 'Alive')
@@ -353,7 +410,8 @@ class ProfileRunner:
 
             self.profiles[key].update({
                 'thread': None,
-                'bot': None,
+                'inner_bot': None,
+                'scenario_engine': None,
                 'status': 'Queueing',
                 'stop_requested': False
             })
