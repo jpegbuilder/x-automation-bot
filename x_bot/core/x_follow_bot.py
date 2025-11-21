@@ -2,7 +2,8 @@ import time
 import logging
 from dataclasses import dataclass
 from typing import Tuple, List, Any, Optional
-from selenium.common import NoSuchElementException
+from selenium.common import NoSuchElementException, InvalidSessionIdException, WebDriverException
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from x_bot.core.selectors import XSelectors
 from .browser_manager import BrowserManager
@@ -297,6 +298,12 @@ class XFollowBot:
             return
 
         try:
+            _ = self.driver.current_window_handle
+        except Exception as e:
+            logger.error(f"Browser session not available: {e}")
+            return
+
+        try:
             pages = max(1, int(pages))
         except (TypeError, ValueError):
             logger.warning(f"scroll_posts(): invalid pages={pages!r}, using 1")
@@ -313,6 +320,12 @@ class XFollowBot:
         )
 
         for i in range(pages):
+            if not self.browser_manager.check_window_available():
+                logger.warning(
+                    f"Profile {self.profile_id}: Window not available, stopping scroll at iteration {i + 1}"
+                )
+                break
+
             try:
                 self.driver.execute_script(
                     "window.scrollBy(0, Math.round(window.innerHeight * 0.8));"
@@ -321,6 +334,16 @@ class XFollowBot:
                     f"Profile {self.profile_id}: scroll_posts iteration {i + 1}/{pages}"
                 )
                 time.sleep(pause)
+            except InvalidSessionIdException:
+                logger.error(
+                    f"Profile {self.profile_id}: Browser session lost during scroll at iteration {i + 1}"
+                )
+                break
+            except WebDriverException as e:
+                logger.error(
+                    f"Profile {self.profile_id}: WebDriver error during scroll at iteration {i + 1}: {e}"
+                )
+                break
             except Exception as e:
                 logger.exception(
                     f"Profile {self.profile_id}: scroll_posts error on iteration {i + 1}: {e}"
