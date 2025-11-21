@@ -85,5 +85,6 @@ scenarios:
       - check_has_posts
       - scroll_posts: 5
       - count_posts
+      - follow_user
       - go_home
       - wait: 4
