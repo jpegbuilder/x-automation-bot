@@ -1,3 +1,4 @@
+import random
 import time
 import logging
 from dataclasses import dataclass
@@ -463,76 +464,49 @@ class XFollowBot:
         )
         return False
 
-    def find_and_goto_repost_author(self) -> bool:
-        """
-        Try to find a reposted post on the current profile and navigate to the original author's profile.
-
-        NOTE:
-        - This is a heuristic implementation because X frequently changes DOM structure.
-        - You should adjust XPATH selectors to match your actual markup.
-        - If nothing is found, the method returns False without raising.
-        """
-        if not self.driver:
-            logger.error("find_and_goto_repost_author() called but driver is not initialized")
-            return False
-
-        logger.info(
-            f"Profile {self.profile_id}: Trying to find reposted post and navigate to original author"
-        )
-
+    def find_and_goto_repost_author(self):
+        """Find the first repost on the page and navigate to the repost author's profile."""
         try:
-            posts = self._find_post_elements()
-            if not posts:
-                logger.warning(
-                    f"Profile {self.profile_id}: find_and_goto_repost_author(): no posts found"
-                )
-                return False
-
-            for post in posts:
-                try:
-                    social_context_candidates = post.find_elements(
-                        By.XPATH,
-                        ".//*[contains(translate(text(),'REPOSTED','reposted'),'reposted')]",
-                    )
-                    if not social_context_candidates:
-                        continue
-
-                    profile_links = post.find_elements(
-                        By.XPATH,
-                        ".//a[@role='link' and contains(@href, '/')]",
-                    )
-                    if not profile_links:
-                        continue
-
-                    for link in profile_links:
-                        href = link.get_attribute("href") or ""
-                        if "/status/" in href:
-                            continue
-                        if "https://x.com/" not in href:
-                            continue
-
-                        logger.info(
-                            f"Profile {self.profile_id}: Navigating to repost author profile: {href}"
-                        )
-                        self.driver.get(href)
-                        return True
-
-                except NoSuchElementException:
-                    continue
-                except Exception as e:
-                    logger.debug(
-                        f"Profile {self.profile_id}: find_and_goto_repost_author(): "
-                        f"error in one post: {e}"
-                    )
-                    continue
-
-            logger.warning(
-                f"Profile {self.profile_id}: find_and_goto_repost_author(): no suitable repost found"
+            # Find all elements that contain the text "REPOSTED" (case-insensitive)
+            repost_badges = self.driver.find_elements(
+                By.XPATH,
+                ".//*[contains(translate(text(),'REPOSTED','reposted'),'reposted')]"
             )
-            return False
+
+            if not repost_badges:
+                logger.info("No repost badges found on page")
+                raise Exception("No repost badges found on page")
+
+            for badge in repost_badges:
+                try:
+                    # Go up to the closest article element that represents the reposted tweet
+                    article = badge.find_element(
+                        By.XPATH,
+                        "./ancestor::article[1]"
+                    )
+
+                    # Inside this article, find the username element based on the known structure
+                    # (equivalent to: //*[@id='id__ipviun8iram']/div[2]/div/div[1]/a/div/span)
+                    username_el = article.find_element(
+                        By.XPATH,
+                        ".//div[2]/div/div[1]/a/div/span"
+                    )
+
+                    # Click on the username to open the repost author's profile
+                    self.driver.execute_script("arguments[0].click();", username_el)
+                    time.sleep(random.uniform(2, 3))
+
+                    logger.info("Found repost and navigated to author")
+                    return "Found repost and navigated to author"
+
+                except Exception as inner_exc:
+                    # If something goes wrong with this particular badge, try the next one
+                    logger.debug(f"Failed to navigate from repost badge: {inner_exc}")
+                    continue
+
+            # If we had repost badges but none led to a successful navigation
+            raise Exception("Repost badges found, but failed to navigate to author")
 
         except Exception as e:
-            logger.exception(
-                f"Profile {self.profile_id}: find_and_goto_repost_author(): unexpected error: {e}"
-            )
-            return False
+            logger.error(f"Failed to find repost: {e}")
+            raise

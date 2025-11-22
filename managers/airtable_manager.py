@@ -411,9 +411,8 @@ class AirtableManager:
 
             logger.info(f"Total records fetched: {len(records)}")
 
-            # First pass: collect all AdsPower IDs and Assigned IG records for batch querying
+            # First pass: collect all AdsPower IDs and Follow Targets attachments
             adspower_ids_to_query = []
-            assigned_ig_ids_to_query = []
             records_with_data = []
 
             profile_field_names = ['Profile', 'Profile Number', 'AdsPower Profile', 'Profile ID', 'ID A']
@@ -434,13 +433,12 @@ class AirtableManager:
                     if adspower_id and record_data.get('profile_number'):
                         adspower_ids_to_query.append(adspower_id)
 
-                # Get Assigned IG record IDs if present
-                if 'Assigned IG' in record['fields']:
-                    assigned_ig_records = record['fields']['Assigned IG']
-                    if isinstance(assigned_ig_records, list) and len(assigned_ig_records) > 0:
-                        # Usually just one record, but could be multiple
-                        record_data['assigned_ig_ids'] = assigned_ig_records
-                        assigned_ig_ids_to_query.extend(assigned_ig_records)
+                # Get Follow Targets attachments if present
+                if 'Follow Targets' in record['fields']:
+                    follow_targets_attachments = record['fields']['Follow Targets']
+                    if isinstance(follow_targets_attachments, list) and len(follow_targets_attachments) > 0:
+                        # Store attachments directly (not linked record IDs)
+                        record_data['follow_targets_attachments'] = follow_targets_attachments
 
                 # Get Already Followed (attachment field)
                 if 'Already Followed' in record['fields']:
@@ -461,70 +459,44 @@ class AirtableManager:
             else:
                 adspower_names = {}
 
-            # Fetch Assigned IG records if any
-            assigned_ig_data = {}
-            if assigned_ig_ids_to_query:
-                logger.info(f"Fetching {len(assigned_ig_ids_to_query)} Assigned IG records...")
+            # Download Follow Targets attachments directly
+            # Create directory for followers files
+            followers_dir = os.path.join(os.path.dirname(__file__), 'assigned_followers')
+            if not os.path.exists(followers_dir):
+                os.makedirs(followers_dir)
 
-                # Create directory for followers files
-                followers_dir = os.path.join(os.path.dirname(__file__), 'assigned_followers')
-                if not os.path.exists(followers_dir):
-                    os.makedirs(followers_dir)
+            # Download Follow Targets files for each profile
+            for record_data in records_with_data:
+                follow_targets_attachments = record_data.get('follow_targets_attachments', [])
+                if follow_targets_attachments:
+                    profile_number = record_data.get('profile_number')
+                    # Usually just one attachment
+                    attachment = follow_targets_attachments[0]
+                    file_url = attachment.get('url')
+                    filename = attachment.get('filename', f'profile_{profile_number}_targets.txt')
 
-                # Function to fetch and download a single record
-                def fetch_and_download_record(record_id):
-                    try:
-                        linked_record = linked_table.get(record_id)
-                        if linked_record:
-                            # Download Filtered Followers file if present
-                            if 'Filtered Followers' in linked_record['fields']:
-                                attachments = linked_record['fields']['Filtered Followers']
-                                if isinstance(attachments, list) and len(attachments) > 0:
-                                    # Usually just one attachment
-                                    attachment = attachments[0]
-                                    file_url = attachment.get('url')
-                                    filename = attachment.get('filename', f'followers_{record_id}.txt')
+                    if file_url:
+                        filepath = os.path.join(followers_dir, f'{profile_number}_{filename}')
 
-                                    if file_url:
-                                        filepath = os.path.join(followers_dir, f'{record_id}_{filename}')
+                        # Check if file already exists
+                        if os.path.exists(filepath):
+                            logger.info(f"Follow Targets file already exists for profile {profile_number}: {filename}")
+                            record_data['followers_file'] = filepath
+                        else:
+                            # Download file
+                            try:
+                                response = requests.get(file_url, timeout=30)
+                                if response.status_code == 200:
+                                    with open(filepath, 'w', encoding='utf-8') as f:
+                                        f.write(response.text)
+                                    logger.info(f"Downloaded Follow Targets file for profile {profile_number}: {filename}")
+                                    record_data['followers_file'] = filepath
+                                else:
+                                    logger.error(f"Failed to download Follow Targets file for profile {profile_number}: HTTP {response.status_code}")
+                            except Exception as e:
+                                logger.error(f"Error downloading Follow Targets file for profile {profile_number}: {e}")
 
-                                        # Check if file already exists
-                                        if os.path.exists(filepath):
-                                            logger.info(f"Followers file already exists for {record_id}: {filename}")
-                                            linked_record['followers_file'] = filepath
-                                        else:
-                                            # Download file
-                                            response = requests.get(file_url, timeout=30)
-                                            if response.status_code == 200:
-                                                with open(filepath, 'w', encoding='utf-8') as f:
-                                                    f.write(response.text)
-                                                logger.info(f"Downloaded followers file for {record_id}: {filename}")
-
-                                                # Store the filepath in the data
-                                                linked_record['followers_file'] = filepath
-                                            else:
-                                                logger.error(f"Failed to download followers file for {record_id}")
-
-                            return (record_id, linked_record)
-                    except Exception as e:
-                        logger.error(f"Error fetching linked record {record_id}: {e}")
-                        return None
-
-                # Use ThreadPoolExecutor to fetch records in parallel
-                from concurrent.futures import ThreadPoolExecutor, as_completed
-                with ThreadPoolExecutor(max_workers=10) as executor:
-                    # Submit all download tasks
-                    future_to_record_id = {executor.submit(fetch_and_download_record, record_id): record_id
-                                           for record_id in assigned_ig_ids_to_query}
-
-                    # Collect results as they complete
-                    for future in as_completed(future_to_record_id):
-                        result = future.result()
-                        if result:
-                            record_id, linked_record = result
-                            assigned_ig_data[record_id] = linked_record
-
-            # Second pass: build profile data with AdsPower names and assigned IG data
+            # Second pass: build profile data with AdsPower names and Follow Targets data
             profile_data_list = []
 
             for record_data in records_with_data:
@@ -561,15 +533,8 @@ class AirtableManager:
                     batch = record['fields']['Batch']
 
                 if profile_number and adspower_id:  # Only include profiles with AdsPower IDs
-                    # Get assigned IG data if available
-                    assigned_followers_file = None
-                    assigned_ig_ids = record_data.get('assigned_ig_ids', [])
-                    if assigned_ig_ids:
-                        # Usually just use the first one
-                        first_assigned_ig = assigned_ig_ids[0]
-                        if first_assigned_ig in assigned_ig_data:
-                            linked_data = assigned_ig_data[first_assigned_ig]
-                            assigned_followers_file = linked_data.get('followers_file')
+                    # Get Follow Targets file if available (downloaded earlier)
+                    assigned_followers_file = record_data.get('followers_file')
 
                     # Load "Already Followed" from Airtable (attachment field)
                     already_followed_file = None

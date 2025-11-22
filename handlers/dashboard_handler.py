@@ -36,16 +36,26 @@ class DashboardHandler(BaseHTTPRequestHandler):
                             continue
 
                         airtable_status = info.get('airtable_status', 'Alive')
-                        if airtable_status == 'Alive':
+                        # Handle both list and string status formats
+                        if isinstance(airtable_status, list):
+                            status_check = airtable_status[0] if airtable_status else 'Alive'
+                        else:
+                            status_check = airtable_status
+
+                        logger.info(f"Profile {pid}: airtable_status={airtable_status}, status_check={status_check}, thread={info.get('thread')}")
+                        # Allow both 'Alive' and 'Logged In' statuses to start
+                        if status_check in ['Alive', 'Logged In ⭐️', 'Logged In']:
                             thread = info.get('thread')
                             if thread is None or not thread.is_alive():
                                 alive_profiles.append(pid)
+                                logger.info(f"Profile {pid} added to alive_profiles")
 
                 if not alive_profiles:
                     logger.info("No profiles to start")
                     return
 
-                alive_profiles.sort(key=lambda x: int(x))
+                # Sort by profile_number instead of profile ID
+                alive_profiles.sort(key=lambda x: int(self.server.profiles.get(x, {}).get('profile_number', 999999)))
                 logger.info(f"Starting {len(alive_profiles)} profiles in order: {alive_profiles[:5]}...")
 
                 config = self.server.config_manager.load_config() or {}
@@ -72,6 +82,37 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
         self.server.profile_executor.submit(_start_all_async)
         return True, -1  # -1 — «счёт ведётся асинхронно»
+
+    def stop_all_profiles_backend(self):
+        """Stop all running profiles"""
+
+        def _stop_all_async():
+            try:
+                running_profiles = []
+
+                with self.server.profiles_lock:
+                    for pid, info in self.server.profiles.items():
+                        thread = info.get('thread')
+                        if thread and thread.is_alive():
+                            running_profiles.append(pid)
+
+                if not running_profiles:
+                    logger.info("No profiles to stop")
+                    return
+
+                logger.info(f"Stopping {len(running_profiles)} profiles...")
+
+                for pid in running_profiles:
+                    self.server.profile_controller.stop_profile(pid)
+                    logger.info(f"Stopped profile {pid}")
+
+                logger.info("Stop All completed")
+
+            except Exception as e:
+                logger.error(f"Error in stop all: {e}")
+
+        self.server.profile_executor.submit(_stop_all_async)
+        return True, -1
 
     def do_GET(self):
         with self.server.request_lock:
@@ -236,6 +277,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 # БЫЛО: success, count = start_all_profiles_backend(...)
                 success, count = self.start_all_profiles_backend(vps, phase, batch)
 
+                self._set_headers()
+                self.wfile.write(json.dumps({'success': success, 'count': count}).encode())
+                return
+            elif act == 'stop_all':
+                success, count = self.stop_all_profiles_backend()
                 self._set_headers()
                 self.wfile.write(json.dumps({'success': success, 'count': count}).encode())
                 return
