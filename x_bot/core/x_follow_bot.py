@@ -2,10 +2,13 @@ import random
 import time
 import logging
 from dataclasses import dataclass
+from selenium.webdriver.support import expected_conditions as EC
 from typing import Tuple, List, Any, Optional
 from selenium.common import NoSuchElementException, InvalidSessionIdException, WebDriverException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.wait import WebDriverWait
+
 from x_bot.core.selectors import XSelectors
 from .browser_manager import BrowserManager
 from .account_checker import AccountChecker
@@ -464,49 +467,90 @@ class XFollowBot:
         )
         return False
 
-    def find_and_goto_repost_author(self):
-        """Find the first repost on the page and navigate to the repost author's profile."""
+    def find_and_goto_repost_author(self, *args):
+        """
+        Find a repost ("X reposted") on the page and navigate to the ORIGINAL tweet author's profile.
+
+        Logic:
+        - Locate <span data-testid="socialContext"> that contains the word "reposted"
+          (this is the "X reposted" label – X is the reposting user).
+        - Go up to its closest ancestor <article> (the repost tweet container).
+        - Inside that <article>, find the original author block: <div data-testid="User-Name">…</div>.
+        - Click the first <a> inside that block (this is the original tweet author's profile link).
+        """
         try:
-            # Find all elements that contain the text "REPOSTED" (case-insensitive)
+            wait = WebDriverWait(self.driver, 10)
+
+            # 1. Find all social context spans that indicate a repost ("X reposted")
             repost_badges = self.driver.find_elements(
                 By.XPATH,
-                ".//*[contains(translate(text(),'REPOSTED','reposted'),'reposted')]"
+                "//span[@data-testid='socialContext' and "
+                "contains(translate(normalize-space(.),'REPOSTED','reposted'),'reposted')]"
             )
 
             if not repost_badges:
-                logger.info("No repost badges found on page")
+                logger.info("No repost socialContext spans found on page")
                 raise Exception("No repost badges found on page")
 
             for badge in repost_badges:
+                article = None
                 try:
-                    # Go up to the closest article element that represents the reposted tweet
-                    article = badge.find_element(
+                    # 2. Go up to the closest <article> that contains this repost context
+                    article = badge.find_element(By.XPATH, "./ancestor::article[1]")
+
+                    # 3. Inside this article, find the original author block:
+                    #    <div data-testid="User-Name"><a href="/original_author">...</a></div>
+                    author_link = article.find_element(
                         By.XPATH,
-                        "./ancestor::article[1]"
+                        ".//div[@data-testid='User-Name']//a[1]"
                     )
 
-                    # Inside this article, find the username element based on the known structure
-                    # (equivalent to: //*[@id='id__ipviun8iram']/div[2]/div/div[1]/a/div/span)
-                    username_el = article.find_element(
-                        By.XPATH,
-                        ".//div[2]/div/div[1]/a/div/span"
+                    # Debug: log which original author we are about to click
+                    try:
+                        href = author_link.get_attribute("href")
+                        logger.debug(f"Original tweet author link detected: {href}")
+                    except Exception:
+                        pass
+
+                    # 4. Scroll into view to avoid overlay / visibility issues
+                    self.driver.execute_script(
+                        "arguments[0].scrollIntoView({block: 'center', inline: 'center'});",
+                        author_link,
                     )
 
-                    # Click on the username to open the repost author's profile
-                    self.driver.execute_script("arguments[0].click();", username_el)
+                    # 5. Wait until the link is clickable
+                    wait.until(EC.element_to_be_clickable(author_link))
+
+                    # 6. Try normal Selenium click first
+                    try:
+                        author_link.click()
+                    except Exception as click_exc:
+                        logger.debug(f"Normal click failed, trying JS click: {click_exc}")
+                        # Fallback to JS click
+                        self.driver.execute_script("arguments[0].click();", author_link)
+
                     time.sleep(random.uniform(2, 3))
-
-                    logger.info("Found repost and navigated to author")
-                    return "Found repost and navigated to author"
+                    logger.info("Found repost and navigated to ORIGINAL tweet author's profile")
+                    return "Found repost and navigated to original author"
 
                 except Exception as inner_exc:
-                    # If something goes wrong with this particular badge, try the next one
-                    logger.debug(f"Failed to navigate from repost badge: {inner_exc}")
+                    logger.debug(f"Failed to navigate from repost badge to original author: {inner_exc}")
+
+                    # Optional: dump article HTML once for debugging if needed
+                    if article is not None:
+                        try:
+                            html = article.get_attribute("outerHTML")
+                            logger.debug("Repost article HTML (truncated): %s",
+                                         (html[:1000] + "...") if html and len(html) > 1000 else html)
+                        except Exception as html_exc:
+                            logger.debug(f"Failed to get article outerHTML: {html_exc}")
+
+                    # Try next badge if available
                     continue
 
             # If we had repost badges but none led to a successful navigation
-            raise Exception("Repost badges found, but failed to navigate to author")
+            raise Exception("Repost badges found, but failed to navigate to original author")
 
         except Exception as e:
-            logger.error(f"Failed to find repost: {e}")
+            logger.error(f"Failed to find repost and navigate to original author: {e}")
             raise

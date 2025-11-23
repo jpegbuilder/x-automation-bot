@@ -68,6 +68,7 @@ scenarios:
       - scroll_posts: 4
       - like_random_post
       - find_and_goto_repost_author
+      - scroll_posts: 3
       - wait: 5
       - go_back
       - follow_user

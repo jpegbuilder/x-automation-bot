@@ -75,7 +75,12 @@ class AirtableManager:
 
                 if records:
                     record_id = records[0]['id']
-                    update_data = {'Status': [status,]}
+                    if status == 'Suspended':
+                        current_status = records[0].get("fields", {}).get("Status")
+                        current_status.append(status)
+                        update_data = {'Status': current_status}
+                    else:
+                        update_data = {'Status': [status]}
                     result = table.update(record_id, update_data)
                     logger.info(f"✅ Updated profile {profile_number} status to '{status}' in Airtable")
                     return True

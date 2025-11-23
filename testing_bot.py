@@ -4,9 +4,9 @@ X Follow Bot - Test Mode
 Testing the bot with scenarios defined in scenarios.yaml
 
 Usage examples:
-    python test_bot.py --ads_id=YOUR_ID --scenario=simple_follow --target=username
-    python test_bot.py --ads_id=YOUR_ID --scenario=like_and_follow --target=username
-    python test_bot.py --ads_id=YOUR_ID --scenario=careful_follow --target=username
+    python testing_bot.py --ads_id=YOUR_ID --scenario=simple_follow --target=username
+    python testing_bot.py --ads_id=YOUR_ID --scenario=like_and_follow --target=username
+    python testing_bot.py --ads_id=YOUR_ID --scenario=careful_follow --target=username
 """
 
 import sys
