@@ -3,6 +3,8 @@ import random
 import logging
 import json
 from typing import Tuple
+from urllib.parse import urlparse
+
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -40,6 +42,22 @@ class FollowManager:
             if not self.browser_manager.check_window_available():
                 logger.error(f"Profile {self.profile_id}: Browser window unavailable")
                 return False
+
+            current_url = ""
+            try:
+                current_url = self.driver.get_current_url() or ""
+            except Exception as e:
+                current_url = ""
+
+            if current_url:
+                try:
+                    parsed = urlparse(current_url)
+                    first_segment = parsed.path.strip("/").split("/")[0] if parsed.path else ""
+                    if parsed.netloc in ("x.com", "www.x.com") and first_segment.lower() == username.lower():
+                        logger.debug(f"Profile {self.profile_id}: Already on @{username} profile page")
+                        return True
+                except Exception as e:
+                    logger.debug(f"Profile {self.profile_id}: Failed to parse current url '{current_url}': {e}")
 
             profile_url = f"https://x.com/{username}"
             self.driver.get(profile_url)

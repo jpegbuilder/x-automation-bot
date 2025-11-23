@@ -12,6 +12,7 @@ Usage examples:
 import sys
 import argparse
 import os
+import logging
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, CURRENT_DIR)
@@ -59,6 +60,13 @@ def main() -> int:
     )
 
     args = parser.parse_args()
+
+    log_level = logging.DEBUG if args.verbose else logging.INFO
+    logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[logging.StreamHandler(sys.stdout)],
+    )
 
     # Print banner
     print("\n" + "=" * 60)

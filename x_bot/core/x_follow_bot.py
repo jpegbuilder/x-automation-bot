@@ -290,7 +290,20 @@ class XFollowBot:
         )
         return count
 
-    def scroll_posts(self, pages: int = 1, pause: float = 3.0) -> None:
+    def scroll_top(self):
+        """
+        Scroll to the top of the current page.
+        """
+        if not self.driver:
+            logger.error("scroll_top() called but driver is not initialized")
+
+        try:
+            self.driver.execute_script("window.scrollTo(0, 0)")
+            time.sleep(random.uniform(1, 2))
+        except Exception as e:
+            logger.error(f"scroll_top(): failed to scroll to top: {e}")
+
+    def scroll_posts(self, pages: int = 1, pause: float = 5.0) -> None:
         """
         Scroll down the page to load more posts.
 
@@ -307,17 +320,20 @@ class XFollowBot:
             logger.error(f"Browser session not available: {e}")
             return
 
+        if not self.check_has_posts():
+            return
+
         try:
             pages = max(1, int(pages))
         except (TypeError, ValueError):
-            logger.warning(f"scroll_posts(): invalid pages={pages!r}, using 1")
-            pages = 1
+            logger.warning(f"scroll_posts(): invalid pages={pages!r}, using 3")
+            pages = 3.0
 
         try:
             pause = float(pause)
         except (TypeError, ValueError):
-            logger.warning(f"scroll_posts(): invalid pause={pause!r}, using 1.0")
-            pause = 1.0
+            logger.warning(f"scroll_posts(): invalid pause={pause!r}, using 5.0")
+            pause = 5.0
 
         logger.info(
             f"Profile {self.profile_id}: Scrolling posts (pages={pages}, pause={pause})"
@@ -354,6 +370,8 @@ class XFollowBot:
                 )
                 break
 
+        self.scroll_top()
+
     def _find_like_button_in_post(self, post_element: Any) -> Optional[Any]:
         """
         Try to find a 'Like' button inside a given post element.
@@ -361,7 +379,7 @@ class XFollowBot:
         Returns WebElement or None.
         """
         like_xpaths = [
-            ".//div[@data-testid='like']",
+            ".//button[@data-testid='like']",
         ]
 
         for xp in like_xpaths:
@@ -400,6 +418,13 @@ class XFollowBot:
             return False
 
         try:
+            wait = WebDriverWait(self.driver, 5)
+
+            self.driver.execute_script(
+                "arguments[0].scrollIntoView({block: 'center', inline: 'center'});",
+                like_btn,
+            )
+            wait.until(EC.element_to_be_clickable(like_btn))
             like_btn.click()
             logger.info(
                 f"Profile {self.profile_id}: like_first_post(): like clicked on first post"
@@ -451,6 +476,13 @@ class XFollowBot:
                 continue
 
             try:
+                wait = WebDriverWait(self.driver, 5)
+
+                self.driver.execute_script(
+                    "arguments[0].scrollIntoView({block: 'center', inline: 'center'});",
+                    like_btn,
+                )
+                wait.until(EC.element_to_be_clickable(like_btn))
                 like_btn.click()
                 logger.info(
                     f"Profile {self.profile_id}: like_random_post(): liked post index={idx}"
@@ -489,8 +521,8 @@ class XFollowBot:
             )
 
             if not repost_badges:
-                logger.info("No repost socialContext spans found on page")
-                raise Exception("No repost badges found on page")
+                logger.info("No repost socialContext spans found on page.")
+                return "No repost socialContext spans found on page."
 
             for badge in repost_badges:
                 article = None

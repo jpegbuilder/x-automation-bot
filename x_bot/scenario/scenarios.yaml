@@ -14,12 +14,14 @@
 scenarios:
   # Scenario 1: Simple follow
   simple_follow:
-    description: "Go to Profile → Follow → Home"
+    description: "Go to Profile → Like → Follow → Home"
     target_required: true
     steps:
       - wait: 3
       - navigate_to_profile
       - wait: 4
+      - like_random_post
+      - wait: 5
       - follow_user
       - go_home
       - wait: 3
@@ -70,7 +72,6 @@ scenarios:
       - find_and_goto_repost_author
       - scroll_posts: 3
       - wait: 5
-      - go_back
       - follow_user
       - go_home
       - wait: 5
