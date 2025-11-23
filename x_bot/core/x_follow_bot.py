@@ -2,6 +2,8 @@ import random
 import time
 import logging
 from dataclasses import dataclass
+from urllib.parse import urlparse
+
 from selenium.webdriver.support import expected_conditions as EC
 from typing import Tuple, List, Any, Optional
 from selenium.common import NoSuchElementException, InvalidSessionIdException, WebDriverException
@@ -106,14 +108,54 @@ class XFollowBot:
     def close_extra_tabs(self) -> bool:
         return self.browser_manager.close_extra_tabs()
 
+    def check_cloudflare(self) -> bool:
+        """
+        Return True if Cloudflare protection is detected.
+        """
+        if not self.driver:
+            return False
+
+        try:
+            current_url = self.driver.current_url or ""
+            page_source = (self.driver.page_source or "").lower()
+        except Exception as e:
+            logger.error(f"Profile {self.profile_id}: check_cloudflare(): Failed to get page source: {e}")
+            return False
+
+        try:
+            parsed = urlparse(current_url)
+            host = (parsed.netloc or "").lower()
+        except Exception as e:
+            host = current_url.lower()
+
+        cf_markers = [
+            "please wait while we check your browser",
+            "checking if the site connection is secure",
+            "just a moment...",
+            "attention required!",
+            "cloudflare ray id",
+            "performance & security by cloudflare",
+        ]
+
+        is_cf = (
+                "cloudflare" in host
+                or any(m in page_source for m in cf_markers)
+        )
+
+        if is_cf:
+            logger.error(f"Profile {self.profile_id}: Cloudflare protection detected")
+            return True
+
+        return False
+
     def navigate_to_x(self) -> bool:
+
         try:
             logger.info(f"Profile {self.profile_id}: Navigating to X.com...")
 
             self.driver.get("https://x.com")
-            time.sleep(2)
-
             self.close_extra_tabs()
+            time.sleep(2)
 
             if self.check_if_suspended():
                 self.state.is_suspended = True

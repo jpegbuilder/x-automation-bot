@@ -56,6 +56,33 @@ class StatusManager:
         except Exception as e:
             logger.error(f"Error marking profile {profile_id} as blocked: {e}")
 
+    def mark_profile_cloudflare_blocked(self, profile_id):
+        """Mark profile as permanently blocked"""
+        try:
+            pid_str = str(profile_id)
+
+            # Update in-memory
+            with self.profiles_lock:
+                if pid_str in self.profiles:
+                    self.profiles[pid_str]['status'] = 'Blocked'
+                    self.profiles[pid_str]['stop_requested'] = True
+                    self.profiles[pid_str]['airtable_status'] = 'Cloudflare Blocked'
+
+            # Write status asynchronously
+            self.async_file_manager.write_status_async({pid_str: 'blocked'})
+
+            logger.info(f"Profile {profile_id} marked as Cloudflare BLOCKED")
+
+            # Update Airtable asynchronously
+            self.airtable_executor.submit(
+                self.airtable_manager.update_profile_status,
+                profile_id,
+                'Cloudflare Blocked'
+            )
+
+        except Exception as e:
+            logger.error(f"Error marking profile {profile_id} as blocked: {e}")
+
     def mark_profile_suspended(self, profile_id):
         """Mark profile as permanently suspended"""
         try:

@@ -129,6 +129,12 @@ class ProfileRunner:
             # Close extra tabs immediately after connecting to reduce RAM usage
             inner_bot.close_extra_tabs()
 
+            if not inner_bot.check_cloudflare():
+                with self.profiles_lock:
+                    self.profiles[key]['status'] = 'Cloudflare Blocked'
+                self.status_manager.mark_profile_cloudflare_blocked(pid)
+                inner_bot.stop_profile()
+
             if not inner_bot.navigate_to_x():
                 if hasattr(inner_bot, 'is_suspended') and inner_bot.is_suspended:
                     logger.error(f"Profile {pid}: Account SUSPENDED")
