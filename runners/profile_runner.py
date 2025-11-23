@@ -129,7 +129,7 @@ class ProfileRunner:
             # Close extra tabs immediately after connecting to reduce RAM usage
             inner_bot.close_extra_tabs()
 
-            if not inner_bot.check_cloudflare():
+            if inner_bot.check_cloudflare():
                 with self.profiles_lock:
                     self.profiles[key]['status'] = 'Cloudflare Blocked'
                 self.status_manager.mark_profile_cloudflare_blocked(pid)

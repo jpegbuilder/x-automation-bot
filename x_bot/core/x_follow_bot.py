@@ -109,41 +109,40 @@ class XFollowBot:
         return self.browser_manager.close_extra_tabs()
 
     def check_cloudflare(self) -> bool:
-        """
-        Return True if Cloudflare protection is detected.
-        """
+        """Return True if Cloudflare / X access protection page is detected."""
         if not self.driver:
             return False
 
         try:
-            current_url = self.driver.current_url or ""
+            current_url = (self.driver.current_url or "").lower()
             page_source = (self.driver.page_source or "").lower()
         except Exception as e:
-            logger.error(f"Profile {self.profile_id}: check_cloudflare(): Failed to get page source: {e}")
+            logger.debug(f"Profile {self.profile_id}: check_cloudflare(): failed to read page: {e}")
             return False
 
-        try:
-            parsed = urlparse(current_url)
-            host = (parsed.netloc or "").lower()
-        except Exception as e:
-            host = current_url.lower()
-
-        cf_markers = [
-            "please wait while we check your browser",
-            "checking if the site connection is secure",
-            "just a moment...",
-            "attention required!",
-            "cloudflare ray id",
-            "performance & security by cloudflare",
+        blocked_url_patterns = [
+            "x.com/account/access",
         ]
 
-        is_cf = (
-                "cloudflare" in host
-                or any(m in page_source for m in cf_markers)
-        )
+        cf_markers = [
+            "verify you are human by completing the action below",
+            "performance & security by cloudflare",
+            "x.com needs to review the security of your connection before proceeding",
+            "cf-browser-verification",
+            "cf-challenge",
+            "/cdn-cgi/challenge-platform/",
+            "cloudflare ray id",
+        ]
 
-        if is_cf:
-            logger.error(f"Profile {self.profile_id}: Cloudflare protection detected")
+        is_access_block = any(p in current_url for p in blocked_url_patterns)
+        matched_markers = [m for m in cf_markers if m in page_source]
+        is_cf_challenge = bool(matched_markers)
+
+        if is_access_block or is_cf_challenge:
+            logger.error(
+                f"Profile {self.profile_id}: protection page detected "
+                f"(url={current_url}, markers={matched_markers}) – entering silent mode"
+            )
             return True
 
         return False
